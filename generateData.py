@@ -5,11 +5,11 @@ from datetime import datetime
 # === 設定區 ===
 SERIAL_PORT = 'COM5'     # 記得改成你的 Port
 BAUD_RATE = 115200
-FILE_NAME = 'data_60s.txt'
+FILE_NAME = 'data_180s.txt'
 
 # ⏳ 想要狩獵多久？（單位：秒）
 # 如果設為 None，我就會一直抓一直抓，直到你按 Ctrl+C 強制把我的頭按下去為止
-HUNTING_DURATION = 60  
+HUNTING_DURATION = 180  
 
 def start_hunting():
     try:
