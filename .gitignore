@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.zip
+*.rar
+*.tar.gz
+.env
+.venv
+env/
+venv/
+.DS_Store
+ppg2ecg/weights/
+
