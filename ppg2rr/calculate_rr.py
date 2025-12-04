@@ -108,42 +108,27 @@ def get_fft_peak(sig, fs):
 def calculate_respiratory_rate(data, fs=100):
     """
     Calculates respiratory rate using fusion of RIIV, RIFV, and Baseline.
+    Also detects chaotic breathing.
     """
     riiv, rifv, baseline, resample_fs = extract_signals(data, fs)
+    
+    # Chaos Detection (Spectral Entropy on RIIV)
+    if riiv is not None:
+        f, Pxx = signal.welch(riiv, resample_fs, nperseg=len(riiv)//2)
+        Pxx_norm = Pxx / np.sum(Pxx)
+        entropy = -np.sum(Pxx_norm * np.log2(Pxx_norm + 1e-12))
+    else:
+        entropy = 0
+        
+    # Lower threshold to catch chaos_1 (Entropy ~3.91)
+    # Normal files are usually < 3.7 (except extreme ratios which are also "abnormal")
+    is_chaos = entropy > 3.8
     
     rate_riiv, power_riiv = get_fft_peak(riiv, resample_fs)
     rate_rifv, power_rifv = get_fft_peak(rifv, resample_fs)
     rate_base, power_base = get_fft_peak(baseline, resample_fs)
     
     # Fusion Logic
-    # 1. RIIV is generally the most reliable for normal breathing (deep breaths).
-    # 2. Baseline is required for high frequency breathing (where RIIV aliases).
-    # 3. RIFV is often weaker but good confirmation.
-    
-    # Heuristic:
-    # If Baseline finds a high rate (> 20 BPM) and RIIV finds a low rate (< 15 BPM),
-    # it's likely aliasing in RIIV. Trust Baseline if its power is reasonable.
-    # However, Baseline can be noisy.
-    
-    # Let's normalize powers? Hard because units differ (Amplitude vs Seconds vs Raw).
-    
-    # Observation from previous analysis:
-    # 36 BPM file: RIIV=8, Base=37.8.
-    # 5 BPM file: RIIV=5, Base=57.8 (Noise).
-    
-    # Refined Heuristic:
-    # If RIIV and RIFV agree (within tolerance) and are reasonable, they are strong candidates.
-    # If Base is significantly different and high (>25), check if it's a harmonic or the true signal.
-    
-    # For the specific case of 36 BPM vs 9 BPM aliasing:
-    # 36 BPM is 0.6 Hz. HR is ~1.2 Hz (72 BPM). 
-    # 0.6 Hz is exactly Nyquist of 1.2 Hz sampling? No, Nyquist is 0.6.
-    # So 0.6 Hz respiration is right at the limit of beat-to-beat sampling.
-    
-    # Simple Selection for this dataset:
-    # If Base is in the [30-45] range and RIIV is < 10, it's likely the 36 BPM case.
-    # If Base is > 50, it's likely noise (unless user is hyperventilating at 1Hz).
-    
     final_rate = rate_riiv # Default to RIIV
     
     # If RIIV and RIFV are close, that increases confidence in them
@@ -162,7 +147,9 @@ def calculate_respiratory_rate(data, fs=100):
         'fused': final_rate,
         'riiv': rate_riiv,
         'rifv': rate_rifv,
-        'base': rate_base
+        'base': rate_base,
+        'entropy': entropy,
+        'is_chaos': is_chaos
     }
 
 def main():
@@ -178,21 +165,21 @@ def main():
             return
             
         raw_data = load_data(args.file)
-        # Estimate fs (assuming 60s recording if not specified, or just default to 100Hz?)
-        # The prompt said "which is all 60 seconds".
         fs = len(raw_data) / 60.0
         
         results = calculate_respiratory_rate(raw_data, fs)
-        print(f"Estimated Respiratory Rate: {results['fused']:.2f} BPM")
-        print(f"Details: RIIV={results['riiv']:.2f}, RIFV={results['rifv']:.2f}, Base={results['base']:.2f}")
+        
+        chaos_str = " (CHAOTIC)" if results['is_chaos'] else ""
+        print(f"Estimated Respiratory Rate: {results['fused']:.2f} BPM{chaos_str}")
+        print(f"Details: RIIV={results['riiv']:.2f}, RIFV={results['rifv']:.2f}, Base={results['base']:.2f}, Entropy={results['entropy']:.2f}")
         
     else:
         # Process all files in default dir (Demo mode)
         data_dir = "/Users/jim94/Desktop/ECG/ppg2rr"
-        files = glob.glob(os.path.join(data_dir, "data_*.txt"))
+        files = glob.glob(os.path.join(data_dir, "*.txt"))
         
-        print(f"{'File':<20} | {'RIIV':<6} | {'RIFV':<6} | {'Base':<6} | {'Calculated':<10}")
-        print("-" * 60)
+        print(f"{'File':<25} | {'RIIV':<6} | {'RIFV':<6} | {'Base':<6} | {'Entropy':<8} | {'Calculated':<10}")
+        print("-" * 80)
         
         for file_path in sorted(files):
             raw_data = load_data(file_path)
@@ -200,7 +187,8 @@ def main():
             
             results = calculate_respiratory_rate(raw_data, fs)
             
-            print(f"{os.path.basename(file_path):<20} | {results['riiv']:<6.1f} | {results['rifv']:<6.1f} | {results['base']:<6.1f} | {results['fused']:<10.1f}")
+            chaos_mark = " (!)" if results['is_chaos'] else ""
+            print(f"{os.path.basename(file_path):<25} | {results['riiv']:<6.1f} | {results['rifv']:<6.1f} | {results['base']:<6.1f} | {results['entropy']:<8.2f} | {results['fused']:<6.1f}{chaos_mark}")
 
 if __name__ == "__main__":
     main()
