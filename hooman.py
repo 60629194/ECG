@@ -621,15 +621,31 @@ class FuturisticPPGViewer:
     # --- Signal Processing Wrappers ---
     def process_signal(self, data_list):
         if not data_list: return []
+        
+        # dc byebye
         vals = np.array(data_list)
         vals = vals - np.mean(vals)
         vals_list = vals.tolist()
+        
+        # 1. High Pass
         if getattr(self, 'hp_enabled', True):
+            # return numpy array
             vals_list = highpass_filter_func(vals_list, FS, HP_CUTOFF)
+            
+        # 2. Low Pass
         if getattr(self, 'lp_enabled', True):
+            # return numpy array
             vals_list = lowpass_filter_func(vals_list, FS, LP_CUTOFF)
+            
+        # 3. Moving Average
         if getattr(self, 'ma_enabled', True):
+            # return list
             vals_list = self.moving_average_filter(vals_list, AVG_WINDOW)
+        
+        # if the final result is numpy array, force it back to python list
+        if isinstance(vals_list, np.ndarray):
+            vals_list = vals_list.tolist()
+            
         return vals_list
         
     def moving_average_filter(self, vals, window_size):
